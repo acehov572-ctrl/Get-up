@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111827"><title>FC26 Live AI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1020;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.wrap{max-width:680px;margin:auto;padding:18px}.card{background:#151d32;border:1px solid #293550;border-radius:18px;padding:16px;margin:12px 0}
+h1{font-size:25px;margin:4px 0 6px}.muted{color:#9aa8c2;font-size:13px}.label{display:block;color:#aebbd0;font-size:13px;margin:12px 0 6px}
+input{width:100%;background:#0e1527;color:#fff;border:1px solid #34415d;border-radius:12px;padding:13px;font-size:16px}
+button{width:100%;border:0;border-radius:12px;padding:14px;margin-top:10px;background:#2563eb;color:#fff;font-size:16px;font-weight:700}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#0e1527;border-radius:14px;padding:13px}.stat b{display:block;font-size:24px;margin-top:4px}
+.score{font-size:42px;font-weight:800;text-align:center;margin:12px 0}.teams{text-align:center;font-size:18px;font-weight:700}.small{font-size:12px;color:#91a0bb;margin-top:12px;line-height:1.5}.green{color:#55e39b}.err{color:#ff8f8f}
+</style></head>
+<body><div class="wrap">
+<div class="card"><h1>⚽ FC26 Live AI</h1><div class="muted">Анализ live-матча по ссылке</div>
+<label class="label">Ссылка на матч Fonbet</label><input id="url" placeholder="Вставь ссылку на матч">
+<button onclick="analyze()">АНАЛИЗИРОВАТЬ</button><div id="status" class="small"></div></div>
+<div id="result" class="card" style="display:none">
+<div id="teams" class="teams"></div><div id="score" class="score"></div><div id="minute" class="muted" style="text-align:center"></div>
+<div class="grid" style="margin-top:16px">
+<div class="stat">ТБ 0.5<b id="o05">—</b></div><div class="stat">ТБ 1.5<b id="o15">—</b></div>
+<div class="stat">ТБ 2.5<b id="o25">—</b></div><div class="stat">ТБ 3.5<b id="o35">—</b></div>
+<div class="stat">Следующий гол<b id="goal">—</b></div><div class="stat">xG до конца<b id="xg">—</b></div></div>
+<div class="stat" style="margin-top:10px;text-align:center">AI-сигнал <b id="signal" class="green">—</b></div>
+<div class="small">Вероятности — статистическая модель, не гарантия результата.</div></div>
+<div class="card"><div class="muted">Если ссылка не читается, сервер может не получить данные из-за защиты или изменения страницы букмекера.</div></div>
+</div>
+<script>
+function pct(x){return Math.max(0,Math.min(99.9,x)).toFixed(1)+'%'}
+function fact(n){let r=1;for(let i=2;i<=n;i++)r*=i;return r}
+function over(l,k){let s=0;for(let i=0;i<=k;i++)s+=Math.exp(-l)*Math.pow(l,i)/fact(i);return 1-s}
+async function analyze(){
+ const url=document.getElementById('url').value.trim(),st=document.getElementById('status');
+ if(!url){st.innerHTML='<span class="err">Вставь ссылку на матч.</span>';return}
+ st.textContent='Получаю данные матча…';
+ try{const r=await fetch('/api/analyze-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+ const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Не удалось получить данные');render(d);st.textContent='Данные получены с сервера.'}
+ catch(e){st.innerHTML='<span class="err">'+e.message+'</span>'}
+}
+function render(d){
+ const home=d.home||d.homeTeam||'Команда 1',away=d.away||d.awayTeam||'Команда 2';
+ const hs=Number(d.homeScore??d.scoreHome??0),as=Number(d.awayScore??d.scoreAway??0),m=Math.min(90,Math.max(0,Number(d.minute??d.time??0)));
+ document.getElementById('result').style.display='block';document.getElementById('teams').textContent=home+' — '+away;
+ document.getElementById('score').textContent=hs+' : '+as;document.getElementById('minute').textContent='Минута: '+m;
+ let l=1.05*((90-m)/90);if(hs+as>=2)l*=1.08;if(hs+as===0&&m<30)l*=1.12;
+ let pg=1-Math.exp(-l),t=hs+as;
+ document.getElementById('o05').textContent=pct(t>=1?100:pg*100);
+ document.getElementById('o15').textContent=pct(t>=2?100:(t===1?pg:over(l,1))*100);
+ document.getElementById('o25').textContent=pct(t>=3?100:(t===2?pg:over(l,2))*100);
+ document.getElementById('o35').textContent=pct(t>=4?100:over(l,3)*100);
+ document.getElementById('goal').textContent=pct(pg*100);document.getElementById('xg').textContent=l.toFixed(2);
+ document.getElementById('signal').textContent=pg>=.55?'СИЛЬНЫЙ':pg>=.35?'СРЕДНИЙ':'СЛАБЫЙ';
+}
+</script></body></html>
